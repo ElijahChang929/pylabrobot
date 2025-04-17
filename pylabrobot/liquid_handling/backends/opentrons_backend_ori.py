@@ -30,23 +30,6 @@ from pylabrobot.resources import (
   TipSpot,
 )
 from pylabrobot.resources.opentrons import OTDeck, OTModule
-from typing import Any
-
-class _OTAPISimulator:
-  """Stub object that swallows all attribute access and calls so that the backend can be run
-  without a physical Opentrons robot connected (simulation mode)."""
-
-  # Always return self so chained attribute access works (`ot_api.runs.create()` etc.).
-  def __getattr__(self, name: str) -> "_OTAPISimulator":  # type: ignore
-    if name == "list_connected_modules":
-      def _empty_list(*args: Any, **kwargs: Any) -> list:
-        return []
-      return _empty_list  # type: ignore
-    return self
-
-  # Final call in a chain returns a benign placeholder value.
-  def __call__(self, *args: Any, **kwargs: Any):
-    return "SIMULATED"
 
 PYTHON_VERSION = sys.version_info[:2]
 
@@ -85,15 +68,10 @@ class OpentronsBackend(LiquidHandlerBackend):
     "p1000_single_gen3": 1000,
   }
 
-  def __init__(self, host: str, port: int = 31950, simulation: bool = False):
+  def __init__(self, host: str, port: int = 31950):
     super().__init__()
-    self.simulation = simulation
-    if self.simulation and not USE_OT:
-      # Use the stub so the rest of the code can import-call `ot_api`.
-      global ot_api  # pylint: disable=global-statement
-      ot_api = _OTAPISimulator()  # type: ignore
 
-    if not USE_OT and not self.simulation:
+    if not USE_OT:
       raise RuntimeError(
         "Opentrons is not installed. Please run pip install pylabrobot[opentrons]."
         " Only supported on Python 3.10 and below."
@@ -118,18 +96,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     }
 
   async def setup(self):
-    """
-    Setup the Opentrons backend.
-    """
-    if self.simulation:
-        # Provide minimal internal state so subsequent logic works.
-        self.left_pipette = {"pipetteId": "sim_left", "name": "p300_single"}
-        self.right_pipette = None
-        self.left_pipette_has_tip = False
-        self.right_pipette_has_tip = False
-        self.ot_api_version = "simulation"
-        return
-
     # create run
     run_id = ot_api.runs.create()
     ot_api.set_run(run_id)
@@ -177,11 +143,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     """
 
     await super().assigned_resource_callback(resource)
-    if self.simulation:
-        if resource.name != "deck":
-            # Record a dummy labware‑id so later look‑ups succeed.
-            self.defined_labware[resource.name] = resource.name
-        return
 
     if resource.name == "deck":
       return
@@ -321,10 +282,6 @@ class OpentronsBackend(LiquidHandlerBackend):
 
   async def unassigned_resource_callback(self, name: str):
     await super().unassigned_resource_callback(name)
-
-    if self.simulation:
-        self.defined_labware.pop(name, None)
-        return
 
     del self.defined_labware[name]
 
@@ -614,7 +571,6 @@ class OpentronsBackend(LiquidHandlerBackend):
 
   async def home(self):
     """Home the robot"""
-    if self.simulation: return
     ot_api.health.home()
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
@@ -642,7 +598,6 @@ class OpentronsBackend(LiquidHandlerBackend):
 
   async def list_connected_modules(self) -> List[dict]:
     """List all connected temperature modules."""
-    if self.simulation: return []
     return cast(List[dict], ot_api.modules.list_connected_modules())
 
   async def move_pipette_head(
@@ -665,7 +620,6 @@ class OpentronsBackend(LiquidHandlerBackend):
         pipette is used.
       force_direct: If True, move the pipette head directly in all dimensions.
     """
-    if self.simulation: return
 
     if self.left_pipette is not None and pipette_id == "left":
       pipette_id = self.left_pipette["pipetteId"]

@@ -1,5 +1,4 @@
 from typing import cast
-
 from pylabrobot.resources.opentrons.load import (
   load_shared_opentrons_resource,
 )
