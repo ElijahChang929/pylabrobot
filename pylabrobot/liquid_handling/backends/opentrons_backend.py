@@ -124,7 +124,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     if self.simulation:
         # Provide minimal internal state so subsequent logic works.
         self.left_pipette = {"pipetteId": "sim_left", "name": "p300_single"}
-        self.right_pipette = None
+        self.right_pipette = {"pipetteId": "sim_left", "name": "p300_single"}
         self.left_pipette_has_tip = False
         self.right_pipette_has_tip = False
         self.ot_api_version = "simulation"
