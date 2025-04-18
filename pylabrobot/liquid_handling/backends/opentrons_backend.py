@@ -31,6 +31,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.opentrons import OTDeck, OTModule
 from typing import Any
+import uuid
 
 class _OTAPISimulator:
   """Stub object that swallows all attribute access and calls so that the backend can be run
@@ -124,10 +125,13 @@ class OpentronsBackend(LiquidHandlerBackend):
     if self.simulation:
         # Provide minimal internal state so subsequent logic works.
         self.left_pipette = {"pipetteId": "sim_left", "name": "p300_single"}
-        self.right_pipette = {"pipetteId": "sim_left", "name": "p300_single"}
+        self.right_pipette = None
         self.left_pipette_has_tip = False
         self.right_pipette_has_tip = False
         self.ot_api_version = "simulation"
+        # Register a dummy run‑id so ot_api decorators won't raise
+        if USE_OT and getattr(ot_api, "set_run_id", None):
+          ot_api.set_run_id(str(uuid.uuid4()))
         return
 
     # create run
