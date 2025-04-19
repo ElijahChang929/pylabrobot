@@ -122,12 +122,11 @@ class VolumeTracker:
     """Remove liquid from the container. Top to bottom."""
 
     if volume > self.get_used_volume():
-      raise TooLittleLiquidError(
-        f"Container has too little liquid: {volume}uL > {self.get_used_volume()}uL."
-      )
+      print(f"Container has too little liquid: {volume}uL > {self.get_used_volume()}uL, please pay attention.")
 
     removed_liquids = []
     removed_volume = 0.0
+
     while removed_volume < volume:
       liquid, liquid_volume = self.pending_liquids.pop()
       removed_volume += liquid_volume
@@ -186,7 +185,7 @@ class VolumeTracker:
     """Get the liquids in the top `top_volume` uL"""
 
     if top_volume > self.get_used_volume():
-      raise TooLittleLiquidError(f"Tracker only has {self.get_used_volume()}uL")
+      print(TooLittleLiquidError(f"Tracker only has {self.get_used_volume()}uL, please pay attention."))
 
     liquids = []
     for liquid, volume in reversed(self.liquids):
