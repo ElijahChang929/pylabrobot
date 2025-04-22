@@ -128,6 +128,9 @@ class VolumeTracker:
     removed_volume = 0.0
 
     while removed_volume < volume:
+      if not self.pending_liquids:  # 如果没有更多液体了，就退出循环，防止空 pop
+        print('Air bubble detected, please pay attention.')
+        break
       liquid, liquid_volume = self.pending_liquids.pop()
       removed_volume += liquid_volume
 
