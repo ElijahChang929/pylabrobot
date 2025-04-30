@@ -13,7 +13,7 @@ from pylabrobot.resources import (
     Coordinate,
 )
 
-class MyLiquidHandler(LiquidHandler):
+class DPLiquidHandler(LiquidHandler):
     """Extended LiquidHandler with additional operations."""
 
     # ---------------------------------------------------------------
@@ -32,6 +32,7 @@ class MyLiquidHandler(LiquidHandler):
         liquid_height: Optional[List[Optional[float]]] = None,
         blow_out_air_volume: Optional[List[Optional[float]]] = None,
         spread: Optional[Literal["wide", "tight", "custom"]] = "wide",
+        delays: Optional[List[int]] = None,
         is_96_well: Optional[bool] = False,
     ):
         """A complete *remove* (aspirate → waste) operation."""
@@ -76,19 +77,20 @@ class MyLiquidHandler(LiquidHandler):
                         vols=[vol],
                         use_channels=use_channels, # only aspirate96 used, default to None
                         flow_rates=flow_rates[0] if flow_rates else None,
-                        offsets=offsets,
-                        liquid_height=liquid_height,
-                        blow_out_air_volume=blow_out_air_volume,
+                        offsets=offsets[0] if offsets else None,
+                        liquid_height=liquid_height[0] if liquid_height else None,
+                        blow_out_air_volume=blow_out_air_volume[0] if blow_out_air_volume else None,
                         spread=spread,
                     )
+                    await self.custom_delay(seconds=delays[0] if delays else 0)
                     await self.dispense(
                         resources=[trash],
                         vols=[vol],
                         use_channels=use_channels,
-                        flow_rates=None,
-                        offsets=offsets,
-                        liquid_height=liquid_height,
-                        blow_out_air_volume=blow_out_air_volume,
+                        flow_rates=flow_rates[1] if flow_rates else None,
+                        offsets=offsets[1] if offsets else None,
+                        liquid_height=liquid_height[1] if liquid_height else None,
+                        blow_out_air_volume=blow_out_air_volume[1] if blow_out_air_volume else None,
                         spread=spread,
                     )
                     await self.discard_tips() # For now, each of tips is discarded after use
@@ -113,7 +115,11 @@ class MyLiquidHandler(LiquidHandler):
         blow_out_air_volume: Optional[List[Optional[float]]] = None,
         spread: Literal["wide", "tight", "custom"] = "wide",
         is_96_well: bool = False,
-        delays: Optional[List[int]] = None
+        delays: Optional[List[int]] = None,
+        mix_time: Optional[List[int]] = None,
+        mix_vol: Optional[List[int]] = None,
+        mix_rate: Optional[List[int]] = None,
+        mix_liquid_height: Optional[List[float]] = None
     ):
         """A complete *add* (aspirate reagent → dispense into targets) operation."""
 
@@ -139,7 +145,7 @@ class MyLiquidHandler(LiquidHandler):
                     offset=Coordinate.zero(),
                     flow_rate=flow_rates[0] if flow_rates else None,
                     blow_out_air_volume=blow_out_air_volume[0] if blow_out_air_volume else None,
-                    use_channels=use_channels,
+                    use_channels=use_channels
                 )
                 await self.discard_tips96()
             else:
@@ -153,24 +159,33 @@ class MyLiquidHandler(LiquidHandler):
                         resources=reagent_sources,
                         vols=[vol],
                         use_channels=use_channels,
-                        flow_rates=flow_rates,
-                        offsets=offsets,
-                        liquid_height=liquid_height,
-                        blow_out_air_volume=blow_out_air_volume,
-                        spread=spread,
+                        flow_rates=flow_rates[0] if flow_rates else None,
+                        offsets=offsets[0] if offsets else None,
+                        liquid_height=liquid_height[0] if liquid_height else None,
+                        blow_out_air_volume=blow_out_air_volume[0] if blow_out_air_volume else None,
+                        spread=spread[0] if spread else None,
                     )
                     await self.custom_delay(seconds=delays[0] if delays else 0)
                     await self.dispense(
                         resources=[tgt],
                         vols=[vol],
                         use_channels=use_channels,
-                        flow_rates=flow_rates,
-                        offsets=offsets,
-                        blow_out_air_volume=blow_out_air_volume,
-                        spread=spread,
+                        flow_rates=flow_rates[1] if flow_rates else None,
+                        offsets=offsets[1] if offsets else None,
+                        blow_out_air_volume=blow_out_air_volume[1] if blow_out_air_volume else None,
+                        liquid_height=liquid_height[1] if liquid_height else None,
+                        spread=spread[1] if spread else None,
                     )
+                    await self.mix(
+                        targets=[tgt],
+                        mix_times=mix_time,
+                        mix_vol=mix_vol,
+                        offsets=offsets[0] if offsets else None,
+                        height_to_bottom=mix_liquid_height[0] if mix_liquid_height else None,
+                        mix_rate=mix_rate[0] if mix_rate else None)
+                    await self.custom_delay(seconds=delays[1] if delays else 0)
                     await self.touch_tip(tgt)
-                    #await self.discard_tips()
+                await self.discard_tips()
         except Exception as e:
             raise RuntimeError(f"Liquid addition failed: {e}") from e
 
@@ -191,7 +206,7 @@ class MyLiquidHandler(LiquidHandler):
         blow_out_air_volume: Optional[List[Optional[float]]] = None,
         spread: Literal["wide", "tight", "custom"] = "wide",
         is_96_well: bool = False,
-        mix_times: int = None,
+        mix_times: Optional[List(int)] = None,
         mix_vol: Optional[int] = None,
         delays: Optional[List[int]] = None,
     ):
@@ -281,8 +296,8 @@ class MyLiquidHandler(LiquidHandler):
                     )
                     await self.mix(
                         targets=[tgt],
-                        mix_times=mix_times,
-                        mix_vol=mix_vol)
+                        mix_times=mix_times[0] if mix_times else None,
+                        mix_vol=mix_vol[0] if mix_vol else None)
                     await self.touch_tip(tgt)
                     await self.discard_tips()
 
@@ -337,6 +352,7 @@ class MyLiquidHandler(LiquidHandler):
         targets: Sequence[Container],
         mix_times: int = None,
         mix_vol: Optional[int] = None,
+        height_to_bottom: Optional[float] = None,
     ):
         """Mix the liquid in the target wells."""
         for _ in range(mix_times):
@@ -347,7 +363,7 @@ class MyLiquidHandler(LiquidHandler):
                     use_channels=None,
                     flow_rates=None,
                     offsets=None,
-                    liquid_height=None,
+                    liquid_height=height_to_bottom,
                     blow_out_air_volume=None,
                     spread="wide"
                 )
@@ -358,7 +374,7 @@ class MyLiquidHandler(LiquidHandler):
                     use_channels=None,
                     flow_rates=None,
                     offsets=None,
-                    liquid_height=None,
+                    liquid_height=height_to_bottom,
                     blow_out_air_volume=None,
                     spread="wide"
                 )

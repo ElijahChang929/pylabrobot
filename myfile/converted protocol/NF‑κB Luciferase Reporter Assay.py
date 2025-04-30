@@ -9,7 +9,7 @@ corning_96_wellplate_360ul_flat,
     nest_1_reservoir_195ml,
     opentrons_96_tiprack_300ul
 )
-from High_level_function.action_defination import MyLiquidHandler
+from High_level_function.action_defination import DPLiquidHandler
 
 # ──────────────────────────────────────
 # User‑configurable constants (µL)
@@ -40,6 +40,8 @@ def _build_deck(lh: LiquidHandler):
     waste_res = nest_1_reservoir_195ml(name=waste_res)
     lh.deck.assign_child_resource(waste_res, location=lh.deck.get_slot(9))
 
+
+
     return {
         "tip_racks"     : tiprack,
         "working_plate" : working_plate,
@@ -53,14 +55,13 @@ def _build_deck(lh: LiquidHandler):
 async def run(simulation: bool = True):
     """Main entry point – set `simulation=True` to skip hardware calls."""
     backend = MyBackend(simulation=simulation)
-    lh = MyLiquidHandler(backend=backend)
+    lh = DPLiquidHandler(backend=backend)
     deck = _build_deck(lh)
 
     # Handy aliases
     pbs        = deck["reagent_res"].wells()[0]
     lysis      = deck["reagent_res"].wells()[1]
     luciferase = deck["reagent_res"].wells()[2]
-    waste      = deck["waste_res"].wells()[0]
     cells_all  = deck["working_plate"].rows()[0][:TOTAL_COL]  # A1–A12
 
     lh.setup()  # initialise backend (homing, etc.)
@@ -69,7 +70,10 @@ async def run(simulation: bool = True):
     await lh.remove_liquid(
         vols=[MEDIUM_VOL]*12,
         sources=cells_all,
-        tip_racks=deck["tip_racks"]
+        tip_racks=deck["tip_racks"],
+        offsets=[Coordinate(x=-2.5, y=0, z=-0.2),Coordinate(x=0, y=0, z=-5)],
+        liquid_height=[0.2,None],
+        flow_rates=[0.2,3]
     )
 
     # ────────── 2. PBS wash (add) ──────────
@@ -78,22 +82,29 @@ async def run(simulation: bool = True):
         reagent_sources=[pbs],
         targets=cells_all,
         delays=[1],
-        tip_racks=deck["tip_racks"]
+        tip_racks=deck["tip_racks"],
+        flow_rates=[3,0.3],
+        offsets=[Coordinate(x=0, y=0, z=0.5),Coordinate(x=0, y=0, z=-2)],
+        blow_out_air_volume=[20,None]
     )
 
     # ────────── 3. PBS wash (remove) ──────────
 
     await lh.remove_liquid(
         vols=[PBS_VOL * 1.5]*12,
+        liquid_height=[0.2,None],
+        offsets=[Coordinate(x=-2.5, y=0, z=0),Coordinate(x=0, y=0, z=-5)],
         sources=cells_all,
         tip_racks=deck["tip_racks"]
     )
 
     # ────────── 4. Add lysis buffer ──────────
 
-    await lh.remove_liquid(
+    await lh.add_liquid(
         vols=[LYSIS_VOL]*12,
+        reagent_sources=[lysis],
         sources=cells_all,
+        delays=[2,2],
         tip_racks=deck["tip_racks"]
     )
 
@@ -101,12 +112,14 @@ async def run(simulation: bool = True):
 
     await lh.add_liquid(
         vols=[LUC_VOL]*12,
-        reagent_sources=[pbs],
+        reagent_sources=[luciferase],
         targets=cells_all,
         delays=[1],
-        tip_racks=deck["tip_racks"]
+        tip_racks=deck["tip_racks"],
+        mix_time=[3],
+        mix_vols=[75],
+        mix_liquid_height=[0.5]
     )
-
 
 # ──────────────────────────────────────
 if __name__ == "__main__":
