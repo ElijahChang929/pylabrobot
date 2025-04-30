@@ -1,5 +1,4 @@
 # NF‑κB Luciferase Reporter Assay – pylabrobot version
-# Author: Guangxin Zhang 
 # This script automates the luciferase activity measurement protocol using
 # pylabrobot and the custom backend you created earlier today.
 
