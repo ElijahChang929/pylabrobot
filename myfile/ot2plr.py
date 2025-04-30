@@ -1,4 +1,6 @@
 # NF‑κB Luciferase Reporter Assay – pylabrobot version
+# This script automates the luciferase activity measurement protocol using
+# pylabrobot and the custom backend you created earlier today.
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.opentrons_backend_jump import OpentronsBackend  # ← change to your backend class
@@ -47,14 +49,21 @@ def _build_deck(lh: LiquidHandler):
         "waste_res"     : waste_res
     }
 
-
+# ──────────────────────────────────────
+def _tip_gen(tip_racks):
+    """Yield the next available tip."""
+    for rack in tip_racks:
+        for tip in rack:
+            yield tip
+    raise RuntimeError("Out of tips!")
 
 # ──────────────────────────────────────
-async def run(simulation: bool = True):
+def run(simulation: bool = False):
     """Main entry point – set `simulation=True` to skip hardware calls."""
     backend = MyBackend(simulation=simulation)
     lh = MyLiquidHandler(backend=backend)
     deck = _build_deck(lh)
+    tips = _tip_gen(deck["tip_racks"])
 
     # Handy aliases
     pbs        = deck["reagent_res"].wells()[0]
@@ -66,47 +75,55 @@ async def run(simulation: bool = True):
     lh.setup()  # initialise backend (homing, etc.)
 
     # ────────── 1. Remove spent medium ──────────
-    await lh.remove_liquid(
-        vols=[MEDIUM_VOL]*12,
-        sources=cells_all,
-        tip_racks=deck["tip_racks"]
-    )
+    for cell in cells_all:
+        lh.pick_up_tips(next(tips))
+        lh.aspirate(cell, MEDIUM_VOL * 1.2, flow_rate=0.2,
+                    offset=Coordinate(x=-2.5, y=0, z=0.2))
+        lh.dispense(waste, MEDIUM_VOL * 1.2, flow_rate=3,
+                    offset=Coordinate(z=-5))
+        lh.drop_tips()
 
     # ────────── 2. PBS wash (add) ──────────
-    await lh.add_liquid(
-        vols=[PBS_VOL]*12,
-        reagent_sources=[pbs],
-        targets=cells_all,
-        delays=[1],
-        tip_racks=deck["tip_racks"]
-    )
+    lh.pick_up_tips(next(tips))
+    for cell in cells_all:
+        lh.aspirate(pbs, PBS_VOL, flow_rate=3)
+        lh.air_gap(20)
+        lh.dispense(cell, PBS_VOL + 20, flow_rate=0.3,
+                    offset=Coordinate(z=-2))
+    lh.drop_tips()
 
     # ────────── 3. PBS wash (remove) ──────────
-
-    await lh.remove_liquid(
-        vols=[PBS_VOL * 1.5]*12,
-        sources=cells_all,
-        tip_racks=deck["tip_racks"]
-    )
+    for cell in cells_all:
+        lh.pick_up_tips(next(tips))
+        lh.aspirate(cell, PBS_VOL * 1.5, flow_rate=0.2,
+                    offset=Coordinate(x=-2.5, y=0, z=0.2))
+        lh.dispense(waste, PBS_VOL * 1.5, flow_rate=3,
+                    offset=Coordinate(z=-5))
+        lh.drop_tips()
 
     # ────────── 4. Add lysis buffer ──────────
-
-    await lh.remove_liquid(
-        vols=[LYSIS_VOL]*12,
-        sources=cells_all,
-        tip_racks=deck["tip_racks"]
-    )
+    lh.pick_up_tips(next(tips))
+    for cell in cells_all:
+        lh.aspirate(lysis, LYSIS_VOL, flow_rate=0.5)
+        backend.delay(seconds=2)
+        lh.dispense(cell, LYSIS_VOL, flow_rate=0.3,
+                    offset=Coordinate(z=5))
+        backend.delay(seconds=2)
+    lh.drop_tips()
+    backend.delay(minutes=3)
 
     # ────────── 5. Add luciferase reagent ──────────
+    for cell in cells_all:
+        lh.pick_up_tips(next(tips))
+        lh.aspirate(luciferase, LUC_VOL, flow_rate=0.75)
+        backend.delay(seconds=2)
+        lh.dispense(cell, LUC_VOL, flow_rate=0.75,
+                    offset=Coordinate(z=-0.5))
+        lh.mix(cell, volume=75, repetitions=3, flow_rate=3,
+               offset=Coordinate(z=0.5))
+        lh.drop_tips()
 
-    await lh.add_liquid(
-        vols=[LUC_VOL]*12,
-        reagent_sources=[pbs],
-        targets=cells_all,
-        delays=[1],
-        tip_racks=deck["tip_racks"]
-    )
-
+    lh.finish()  # wrap‑up (home, log, etc.)
 
 # ──────────────────────────────────────
 if __name__ == "__main__":
